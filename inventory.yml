@@ -1,0 +1,14 @@
+debian:
+  hosts:
+    nfs.lan:
+
+fedora:
+# m1.lan
+
+nfs_servers:
+  hosts:
+    nfs.lan:
+
+proxmox:
+  hosts:
+    pve.lan:

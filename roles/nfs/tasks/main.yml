@@ -1,0 +1,20 @@
+- name: Create exports dir
+  tags: nfs
+  ansible.builtin.file:
+    path: /exports/k8s
+    state: directory
+    mode: "0755"
+- name: Copy exports config
+  tags: nfs
+  ansible.builtin.copy:
+    src: nfs/exports
+    dest: /etc/exports
+    owner: root
+    group: root
+    mode: "0644"
+- name: Enable and start nfs-server.service
+  tags: systemd,nfs
+  ansible.builtin.systemd_service:
+    name: nfs-server
+    enabled: true
+    state: restarted

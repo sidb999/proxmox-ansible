@@ -1,0 +1,24 @@
+- name: Remove enterprise pve repo
+  ansible.builtin.file:
+    state: absent
+    path: /etc/apt/sources.list.d/pve-enterprise.list
+- name: Remove enterprise ceph repo
+  ansible.builtin.file:
+    state: absent
+    path: /etc/apt/sources.list.d/ceph.list
+- name: Fix .bashrc config
+  ansible.builtin.copy:
+    src: .bashrc
+    dest: /root/
+    owner: root
+    group: root
+    mode: "0644"
+- name: Install updates
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: dist
+- name: Install basic software
+  tags: always
+  ansible.builtin.apt:
+    name:
+      - sudo

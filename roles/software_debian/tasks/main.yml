@@ -1,0 +1,9 @@
+- name: Install basic software
+  tags: debian
+  ansible.builtin.apt:
+    name:
+      - htop
+      - curl
+      - wget
+      - tmux
+      - neovim

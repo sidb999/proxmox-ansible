@@ -1,2 +1,1 @@
-/exports/k3s 10.2.222.0/255.255.255.0(rw,no_subtree_check,no_root_squash)
 /exports/k8s 10.2.222.0/255.255.255.0(rw,no_subtree_check,no_root_squash)

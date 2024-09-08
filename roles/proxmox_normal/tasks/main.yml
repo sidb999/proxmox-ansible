@@ -1,0 +1,11 @@
+- name: Install basic software
+  tags: always
+  become: true
+  ansible.builtin.apt:
+    name:
+      - sudo
+      - htop
+      - curl
+      - wget
+      - tmux
+      - neovim
