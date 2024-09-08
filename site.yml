@@ -1,0 +1,110 @@
+---
+- name: Add ansible user
+  hosts: all
+  tags: always
+  become: true
+  pre_tasks:
+    - name: Add ansible user for ansible
+      ansible.builtin.user:
+        name: ansible
+        group: root
+  tasks:
+    - name: Truncate shit
+      ansible.builtin.file:
+        state: absent
+        path: /home/ansible/.ssh/authorized_keys
+    - name: Add ssh key for ansible
+      ansible.posix.authorized_key:
+        user: ansible
+        key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDKo\
+          jSPLZIKYuidpj0iuLKposOnpJmyetF44Fx9lTcha9\
+          lKQt8IzphNoD7Akq6eBiZj/tYFR8/ibEJfII8vlCY\
+          JVN3eNtIEdA26AENswPqAdTR3PToCWXBEjjqsnmoa\
+          J4N0ifpyLsAbmFNlWSqFRO83rFFgACTTimEFcDTvo\
+          1HsVdTIPaBY2x4g8HDQy08bvyZd1rJSME00E97Bcx\
+          TwTuKfwFOFDWP3t2cmsG4eWSCupSqBpaGqWIvRePZ\
+          YxdUXMtxtDXNM78HH0WPXq9TqHTDs/kvzWmkcI3NO\
+          H8E1veAQOotvJGLFphA5iYZQxQ3oRp9hfhpDAL3Mr\
+          TTbU3E4PJ7VyBa++knmu7/Wj7B1lTrsS1Sx3kgRBT\
+          UaRgtpyhH3NNA0I2Umgob73e7DvbZAgg3bfMEAvHa\
+          7+reru7TdXTdW2Q7iVSRZxLD0zVpqY37YBML1kOVL\
+          vus35C20jhAJ8uYsQOS12u5Uxj5dxm9iXIPi9tdWV\
+          EFOiCiedg0iUcs/2gFiHhzbNK/c287CuDGPALsPZM\
+          x3ADjBqLe8QpD37efThG97wNvdzLaldBBMqRmcxJy\
+          BCip183LJ2heo+/Ji774LVUuCkDL4nCTE68fD57a5\
+          3EbAndML0dei2yZfQhN86J2+gHYA5hHY96PjMStow\
+          2Yn0GnNcNTrarHFD08tzNy30Q== root@mainsv"
+    - name: Add sudoers file for ansible
+      ansible.builtin.copy:
+        src: sudoer_ansible
+        dest: /etc/sudoers.d/ansible
+        owner: root
+        group: root
+        mode: "0440"
+- name: Install necessary software for qemu hosts
+  hosts: qemu_debian
+  become: true
+  pre_tasks:
+    - name: Install updates
+      tags: always
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+  tasks:
+    - name: Install qemu guest agents and htop
+      tags: qemu-guest,debian
+      ansible.builtin.apt:
+        name:
+          - htop
+          - qemu-guest-agent
+    - name: Enable qemu-guest-agent service
+      tags: qemu-guest,systemd,debian
+      ansible.builtin.systemd_service:
+        name: qemu-guest-agent
+        enabled: true
+        state: started
+- name: Install necessary software for minipc hosts
+  hosts: minipc_debian,nfs_servers
+  become: true
+  pre_tasks:
+    - name: Install updates
+      tags: always
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+- name: Install nfs server storage
+  hosts: nfs_servers
+  become: true
+  pre_tasks:
+    - name: Install nfs
+      tags: nfs
+      ansible.builtin.apt:
+        update_cache: true
+        name: nfs-kernel-server
+  tasks:
+    - name: Create exports dir
+      tags: nfs
+      ansible.builtin.file:
+        path: /exports/k8s
+        state: directory
+        mode: "0755"
+    - name: Create exports dir
+      tags: nfs
+      ansible.builtin.file:
+        path: /exports/k8s
+        state: directory
+        mode: "0755"
+    - name: Copy exports config
+      tags: nfs
+      ansible.builtin.copy:
+        src: nfs/exports
+        dest: /etc/exports
+        owner: root
+        group: root
+        mode: "0644"
+    - name: Enable and start nfs-server.service
+      tags: systemd,nfs
+      ansible.builtin.systemd_service:
+        name: nfs-server
+        enabled: true
+        state: restarted
