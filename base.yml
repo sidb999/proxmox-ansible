@@ -1,0 +1,37 @@
+#!/usr/bin/env ansible-playbook
+---
+- name: Add ansible user
+  hosts: debian
+  tags: always
+  become: true
+  pre_tasks:
+    - name: Add ansible user for ansible
+      ansible.builtin.user:
+        name: ansible
+        group: root
+  roles:
+    - base
+- name: Install necessary software for debian hosts
+  hosts: debian
+  remote_user: ansible
+  become: true
+  pre_tasks:
+    - name: Install updates
+      tags: always
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+  roles:
+    - software_debian
+- name: Add ansible user
+  hosts: all
+  remote_user: root
+  pre_tasks:
+    - name: Add ansible user for ansible
+      ansible.builtin.user:
+        name: ansible
+        group: root
+        home: /home/ansible
+        shell: /bin/bash
+  roles:
+    - base

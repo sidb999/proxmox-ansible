@@ -1,6 +1,7 @@
 debian:
   hosts:
     nfs.lan:
+    pve.lan:
 
 fedora:
 # m1.lan

@@ -1,4 +1,4 @@
-##!/usr/bin/env ansible-playbook
+#!/usr/bin/env ansible-playbook
 ---
 - name: Add ansible user
   hosts: debian
@@ -35,23 +35,3 @@
         name: nfs-kernel-server
   roles:
     - nfs
-- name: Proxmox initial configuration
-  hosts: proxmox
-  remote_user: root
-  roles:
-    - proxmox_initial
-- name: Add ansible user
-  hosts: proxmox
-  remote_user: root
-  pre_tasks:
-    - name: Add ansible user for ansible
-      ansible.builtin.user:
-        name: ansible
-        group: root
-  roles:
-    - base
-- name: Proxmox normal configuration
-  hosts: proxmox
-  remote_user: ansible
-  roles:
-    - proxmox_normal
