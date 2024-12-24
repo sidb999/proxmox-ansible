@@ -3,6 +3,7 @@
   ansible.builtin.apt:
     name:
       - htop
+      - btop
       - curl
       - wget
       - tmux

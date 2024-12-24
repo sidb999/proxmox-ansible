@@ -13,7 +13,7 @@
     group: root
     mode: "0644"
 - name: Enable and start nfs-server.service
-  tags: systemd,nfs
+  tags: nfs
   ansible.builtin.systemd_service:
     name: nfs-server
     enabled: true
