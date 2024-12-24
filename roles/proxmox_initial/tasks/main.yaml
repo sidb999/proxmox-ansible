@@ -13,6 +13,13 @@
     owner: root
     group: root
     mode: "0644"
+- name: Fix .bashrc config
+  ansible.builtin.copy:
+    src: .bashrc
+    dest: /home/ansible/
+    owner: ansible
+    group: ansible
+    mode: "0644"
 - name: Install updates
   ansible.builtin.apt:
     update_cache: true
