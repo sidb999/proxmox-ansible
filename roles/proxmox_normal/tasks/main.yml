@@ -1,3 +1,15 @@
+- name: Import distro specific vars
+  ansible.builtin.include_vars:
+    dir: vars
+    file: "proxmox.yml"
+
+# - name: Remove the extension from the image filename to get the vm name
+#   ansible.builtin.set_fact:
+#     cloudimage_template_name: "{{ cloudimage_filename.rsplit('.', 1)[0] }}"
+# - name: Append releasedate to templatename
+#   ansible.builtin.set_fact:
+#     cloudimage_template_name: "{{ cloudimage_template_name + '-' + cloudimage_release }}"
+#   when: cloudimage_distro == "ubuntu"
 - name: Install basic software
   tags: always
   become: true
@@ -9,3 +21,52 @@
       - wget
       - tmux
       - neovim
+# pveum acl modify / -group provision -role Administrator
+# pveum user modify dellme6@pam -group provision
+- name: Get list of API groups
+  become: true
+  ansible.builtin.command: pvesh get /access/groups
+  changed_when: false
+  register: pve_groups_list
+- name: Check if provisioning group exists
+  ansible.builtin.set_fact:
+    ansible_group_existed: "{{ proxmox_ansible_group in pve_groups_list.stdout }}"
+- name: Create API group if not exist
+  when: not ansible_group_existed
+  become: true
+  ansible.builtin.command: pvesh create /access/groups --groupid {{ proxmox_ansible_group }}
+  register: pvesh_create_group
+  changed_when: "'error' not in pvesh_create_group.stdout"
+  failed_when: "'error' in pvesh_create_group.stdout"
+
+- name: Get list of API users
+  become: true
+  ansible.builtin.command: pvesh get /access/users
+  changed_when: false
+  register: pve_user_list
+- name: Check if user exists
+  ansible.builtin.set_fact:
+    ansible_user_existed: "{{ proxmox_ansible_user in pve_user_list.stdout }}"
+- name: Create API user if not exist
+  when: not ansible_user_existed
+  become: true
+  ansible.builtin.command: pvesh create /access/users --userid {{ proxmox_ansible_user }} --groups {{ proxmox_ansible_group }}
+  register: pvesh_create_user
+  changed_when: "'error' not in pvesh_create_user.stdout"
+  failed_when: "'error' in pvesh_create_user.stdout"
+
+- name: Get list of pools
+  become: true
+  ansible.builtin.command: pvesh get /pools
+  changed_when: false
+  register: pools_list
+- name: Check if pool exists
+  ansible.builtin.set_fact:
+    k8s_pool_exist: "{{ proxmox_k8s_pool_name in pools_list.stdout }}"
+- name: Create k8s pool if not exist
+  when: not k8s_pool_exist
+  become: true
+  ansible.builtin.command: pvesh create /pools --poolid {{ proxmox_k8s_pool_name }}
+  register: pool_create
+  changed_when: "'error' not in pool_create.stdout"
+  failed_when: "'error' in pool_create.stdout"
