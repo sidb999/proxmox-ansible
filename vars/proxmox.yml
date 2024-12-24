@@ -1,0 +1,10 @@
+---
+proxmox_ansible_user: ansible@pam
+proxmox_ansible_group: provision
+proxmox_k8s_pool_name: k8s
+cloudimage_distro: debian
+template_storage: local
+cloudimage_downloaddir: /tmp
+cloudimage_keep: false
+cloudimage_qemuagent: true
+cloudimage_diskparams: cache=none,discard=on,ssd=1
