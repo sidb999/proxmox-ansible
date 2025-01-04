@@ -1,7 +1,7 @@
 debian:
   hosts:
     nfs.lan:
-    pve.lan:
+    pve:
 
 fedora:
 # m1.lan
@@ -12,4 +12,4 @@ nfs_servers:
 
 proxmox:
   hosts:
-    pve.lan:
+    pve:

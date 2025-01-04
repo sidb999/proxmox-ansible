@@ -1,3 +1,10 @@
+- name: Fix home permissions
+  ansible.builtin.file:
+    path: /home/ansible
+    state: directory
+    recurse: true
+    owner: ansible
+    group: ansible
 - name: Remove enterprise pve repo
   ansible.builtin.file:
     state: absent
@@ -29,3 +36,5 @@
   ansible.builtin.apt:
     name:
       - sudo
+      - parted
+      - kpartx

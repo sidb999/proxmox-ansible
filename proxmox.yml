@@ -1,10 +1,5 @@
 #!/usr/bin/env ansible-playbook
 ---
-- name: Proxmox initial configuration
-  hosts: proxmox
-  remote_user: root
-  roles:
-    - proxmox_initial
 - name: Add ansible user
   hosts: proxmox
   remote_user: root
@@ -22,8 +17,13 @@
         shell: /bin/bash
   roles:
     - base
-# - name: Proxmox normal configuration
-#   hosts: proxmox
-#   remote_user: ansible
-#   roles:
-#     - proxmox_normal
+- name: Proxmox initial configuration
+  hosts: proxmox
+  remote_user: root
+  roles:
+    - proxmox_initial
+- name: Proxmox normal configuration
+  hosts: proxmox
+  remote_user: ansible
+  roles:
+    - proxmox_normal

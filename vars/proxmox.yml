@@ -2,6 +2,15 @@
 proxmox_ansible_user: ansible@pam
 proxmox_ansible_group: provision
 proxmox_k8s_pool_name: k8s
+proxmox_k8s_pool_storage_name: k8s-lvmthin-nvme
+proxmox_k8s_pool_storage_nvme_disk_name: nvme0n1
+proxmox_k8s_pool_storage_nvme_partition_name: nvme0n1p1
+proxmox_k8s_pool_storage_nvme_pvname: pv-k8s-nvme
+proxmox_k8s_pool_storage_nvme_vgname: vg-k8s-nvme
+proxmox_k8s_pool_storage_nvme_lvname: lv-k8s-nvme
+# all content kinds: images,rootdir,vztmpl,backup,iso,snippets
+proxmox_local_content: iso,vztmpl,backup,snippets
+proxmox_k8s_pool_storage_nvme_content: images,rootdir
 cloudimage_distro: debian
 template_storage: local
 cloudimage_downloaddir: /tmp
