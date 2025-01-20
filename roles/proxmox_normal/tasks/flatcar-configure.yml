@@ -1,0 +1,177 @@
+---
+- name: Import distro specific vars
+  ansible.builtin.include_vars:
+    # dir: vars
+    file: "vars/vmtemplate.yml"
+- name: Cluster NextID
+  ansible.builtin.command: pvesh get /cluster/nextid
+  become: true
+  changed_when: false
+  register: nextid
+- name: Snippet storage fs path
+  become: true
+  changed_when: false
+  # ansible.builtin.command: pvesh get /storage/local --noborder --noheader | grep ^path | awk '{print $NF}'
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      pvesh get /storage/local --output-format json | jq -r .path
+    executable: /bin/bash
+  register: local_storage_path
+- name: VM template creation date
+  ansible.builtin.command: date +%Y-%m-%d
+  register: vm_created
+  changed_when: false
+- name: Template facts
+  ansible.builtin.set_fact:
+    template_vm_id: "{{ nextid.stdout }}"
+    template_name_full: "{{ TEMPLATE_NAME }}-{{ FLATCAR_VERSION }}"
+    template_vm_created: "{{ vm_created.stdout }}"
+    template_vm_description: "Flatcar Linux Template\
+      \
+      - Version             : latest\
+      - Cloud-init          : true\
+      Creation date : {{ vm_created.stdout }}"
+    snippet_storage_path: "{{ local_storage_path.stdout }}/snippets"
+    snippet_storage_name: "{{ SNIPPET_STORAGE }}"
+    iso_storage_path: "{{ local_storage_path.stdout }}/template/iso"
+    template_vm_storage_type: "{{ TEMPLATE_VMSTORAGE_TYPE }}"
+    template_vm_storage: "{{ TEMPLATE_VMSTORAGE }}"
+    template_vm_disk_options: "{{ VMDISK_OPTIONS }}"
+    flatcar_version: "{{ FLATCAR_VERSION }}"
+    flatcar_image_url: "https://stable.release.flatcar-linux.net/amd64-usr/current/flatcar_production_qemu_image.img"
+    flatcar_image: "flatcar_production_qemu_image.img"
+- name: Add flatcar ignition template
+  become: true
+  ansible.builtin.copy:
+    src: fcar-base-tmplt.yaml
+    dest: "{{ snippet_storage_path }}/fcar-base-tmplt.yaml"
+    owner: ansible
+    group: ansible
+    mode: "0755"
+- name: Add flatcar deploy script
+  become: true
+  ansible.builtin.copy:
+    src: hook-fcar.sh
+    dest: "{{ snippet_storage_path }}/hook-fcar.sh"
+    owner: ansible
+    group: ansible
+    mode: "0755"
+- name: Check if flatcar qemu image exists
+  become: true
+  ansible.builtin.stat:
+    path: "{{ iso_storage_path }}/{{ flatcar_image }}"
+  register: stat_result
+- name: Download flatcar qemu vdisk image
+  become: true
+  when: not stat_result.stat.exists
+  ansible.builtin.get_url:
+    validate_certs: false
+    url: "{{ flatcar_image_url }}"
+    dest: "{{ iso_storage_path }}"
+    mode: "0755"
+- name: Get list of VM templates
+  become: true
+  ansible.builtin.command: qm list
+  changed_when: false
+  register: vms_list
+- name: Check if flatcar VM template exists
+  ansible.builtin.set_fact:
+    template_exist: "{{ template_name_full in vms_list.stdout }}"
+- name: Create flatcar vm template if not exist
+  when: not template_exist
+  block:
+    - name: Create flatcar vm template
+      become: true
+      register: qm_create
+      changed_when: qm_create.rc == 0
+      failed_when: qm_create.rc > 0
+      ansible.builtin.command: >-
+        qm create {{ template_vm_id }} --name {{ template_name_full }}
+    - name: Set flatcar vm template configuration
+      become: true
+      register: qm_set
+      changed_when: qm_set.rc == 0
+      failed_when: qm_set.rc > 0
+      ansible.builtin.command: >-
+        qm set {{ template_vm_id }} --memory 16384 \
+          --cpu host \
+          --cores 2 \
+          --agent enabled=1 \
+          --autostart \
+          --onboot 1 \
+          --ostype l26 \
+          --tablet 0 \
+          --boot c --bootdisk scsi0
+    - name: Set flatcar vm template description
+      become: true
+      register: qm_set_desc
+      changed_when: qm_set_desc.rc == 0
+      failed_when: qm_set_desc.rc > 0
+      ansible.builtin.command: >-
+        qm set {{ template_vm_id }} --description {{ template_vm_description | quote }}
+    - name: Set flatcar vm template network
+      become: true
+      register: qm_set_net
+      changed_when: qm_set_net.rc == 0
+      failed_when: qm_set_net.rc > 0
+      ansible.builtin.command: >-
+        qm set {{ template_vm_id }} --net0 virtio,bridge=vmbr0
+    - name: Set flatcar vm template cloudinit
+      become: true
+      register: qm_set_cloudinit
+      changed_when: qm_set_cloudinit.rc == 0
+      failed_when: qm_set_cloudinit.rc > 0
+      ansible.builtin.command: >-
+        qm set {{ template_vm_id }} --ide2 {{ template_vm_storage }}:cloudinit
+    - name: Set vmdisk file type
+      when: template_vm_storage_type == "file"
+      ansible.builtin.set_fact:
+        template_vm_disk_name: "{{ template_vm_id }}/vm-{{ template_vm_id }}-disk-0.qcow2"
+        template_vm_disk_format: "--format qcow2"
+    - name: Set vmdisk block type
+      when: template_vm_storage_type == "block"
+      ansible.builtin.set_fact:
+        template_vm_disk_name: "vm-{{ template_vm_id }}-disk-0"
+        template_vm_disk_format: ""
+    - name: Import flatcar vm disk
+      become: true
+      register: qm_import_disk
+      changed_when: qm_import_disk.rc == 0
+      failed_when: qm_import_disk.rc > 0
+      ansible.builtin.command: >-
+        qm importdisk {{ template_vm_id }} {{ iso_storage_path }}/{{ flatcar_image }}
+        {{ template_vm_storage }} {{ template_vm_disk_format }}
+    - name: Set flatcar vm disk
+      become: true
+      register: qm_set_vm_disk
+      changed_when: qm_set_vm_disk.rc == 0
+      failed_when: qm_set_vm_disk.rc > 0
+      ansible.builtin.command: >-
+        qm set {{ template_vm_id }}
+        --scsihw virtio-scsi-pci
+        --scsi0 {{ template_vm_storage }}:{{ template_vm_disk_name }}{{ template_vm_disk_options }}
+    - name: Set flatcar other params
+      become: true
+      register: qm_set_other_params
+      changed_when: qm_set_other_params.rc == 0
+      failed_when: qm_set_other_params.rc > 0
+      ansible.builtin.command: >-
+        qm set {{ template_vm_id }}
+        --serial0 socket
+        --vga serial0
+        --balloon 0
+    - name: Set hook-script
+      become: true
+      register: qm_set_hook_script
+      changed_when: qm_set_hook_script.rc == 0
+      failed_when: qm_set_hook_script.rc > 0
+      ansible.builtin.command: >-
+        qm set {{ template_vm_id }} -hookscript {{ snippet_storage_name }}:snippets/hook-fcar.sh
+    - name: Convert vm template
+      become: true
+      register: qm_convert_vm_template
+      changed_when: qm_convert_vm_template.rc == 0
+      failed_when: qm_convert_vm_template.rc > 0
+      ansible.builtin.command: >-
+        qm template {{ template_vm_id }}
