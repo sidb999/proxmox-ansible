@@ -1,0 +1,172 @@
+---
+- name: Install basic software
+  tags: always
+  become: true
+  ansible.builtin.apt:
+    name:
+      - sudo
+      - htop
+      - curl
+      - wget
+      - tmux
+      - neovim
+      - btop
+      - git
+      - jq
+# pveum acl modify / -group provision -role Administrator
+# pveum user modify dellme6@pam -group provision
+- name: Get list of API groups
+  become: true
+  ansible.builtin.command: pvesh get /access/groups
+  changed_when: false
+  register: pve_groups_list
+- name: Check if provisioning group exists
+  ansible.builtin.set_fact:
+    ansible_group_existed: "{{ proxmox_ansible_group in pve_groups_list.stdout }}"
+- name: Create API group if not exist
+  when: not ansible_group_existed
+  become: true
+  ansible.builtin.command: >-
+    pvesh create /access/groups
+    --groupid {{ proxmox_ansible_group }}
+  register: pvesh_create_group
+  changed_when: "'error' not in pvesh_create_group.stdout"
+  failed_when: "'error' in pvesh_create_group.stdout"
+- name: Get list of API users
+  become: true
+  ansible.builtin.command: pvesh get /access/users
+  changed_when: false
+  register: pve_user_list
+- name: Check if user exists
+  ansible.builtin.set_fact:
+    ansible_user_existed: "{{ proxmox_ansible_user in pve_user_list.stdout }}"
+- name: Create API user if not exist
+  when: not ansible_user_existed
+  become: true
+  ansible.builtin.command: >-
+    pvesh create /access/users
+    --userid {{ proxmox_ansible_user }}
+    --groups {{ proxmox_ansible_group }}
+  register: pvesh_create_user
+  changed_when: "'error' not in pvesh_create_user.stdout"
+  failed_when: "'error' in pvesh_create_user.stdout"
+- name: Get list of pools
+  become: true
+  ansible.builtin.command: pvesh get /pools
+  changed_when: false
+  register: pools_list
+- name: Check if pool exists
+  ansible.builtin.set_fact:
+    k8s_pool_exist: "{{ proxmox_k8s_pool_name in pools_list.stdout }}"
+- name: Create k8s pool if not exist
+  when: not k8s_pool_exist
+  become: true
+  ansible.builtin.command: pvesh create /pools --poolid {{ proxmox_k8s_pool_name }}
+  register: pool_create
+  changed_when: "'error' not in pool_create.stdout"
+  failed_when: "'error' in pool_create.stdout"
+- name: Get list of LVMs
+  become: true
+  ansible.builtin.command: pvesm scan lvm
+  changed_when: false
+  register: lvms_list
+- name: Check if LVM exist
+  ansible.builtin.set_fact:
+    lvm_exist: "{{ proxmox_k8s_pool_storage_nvme_vgname in lvms_list.stdout }}"
+- name: Create k8s lvm storage if not exist
+  when: not lvm_exist
+  block:
+    - name: Print status
+      ansible.builtin.debug:
+        msg: The k8s lvm storage pool not exist in lvms list
+    - name: Create GPT table
+      become: true
+      ansible.builtin.command: >-
+        parted -s /dev/{{ proxmox_k8s_pool_storage_nvme_disk_name }} mklabel gpt
+      register: gpt_create
+      changed_when: gpt_create.rc == 0
+      failed_when: gpt_create.rc > 0
+    - name: Print status
+      ansible.builtin.debug:
+        msg: Created the GPT partition table on disk
+    - name: Create partition
+      become: true
+      ansible.builtin.command: >-
+        parted
+        -a optimal /dev/{{ proxmox_k8s_pool_storage_nvme_disk_name }}
+        --script mkpart ext4 2048s 100%
+      register: partition_create
+      changed_when: partition_create.rc == 0
+      failed_when: partition_create.rc > 0
+    - name: Create PVs
+      become: true
+      # ansible.builtin.command: pvcreate /dev/disk/by-id/yourDisk-part1
+      ansible.builtin.command: >-
+        pvcreate /dev/{{ proxmox_k8s_pool_storage_nvme_partition_name }}
+      register: pv_create
+      changed_when: pv_create.rc == 0
+      failed_when: pv_create.rc > 0
+    - name: Create VGs
+      become: true
+      # ansible.builtin.command: vgcreate newVgName /dev/disk/by-id/yourDisk-part1
+      ansible.builtin.command: >-
+        vgcreate {{ proxmox_k8s_pool_storage_nvme_vgname }}
+        /dev/{{ proxmox_k8s_pool_storage_nvme_partition_name }}
+      register: vg_create
+      changed_when: vg_create.rc == 0
+      failed_when: vg_create.rc > 0
+    - name: Create LVs
+      become: true
+      ansible.builtin.command: >-
+        lvcreate -l99%FREE
+        -n {{ proxmox_k8s_pool_storage_nvme_lvname }}
+        -T {{ proxmox_k8s_pool_storage_nvme_vgname }}
+      register: lv_create
+      changed_when: lv_create.rc == 0
+      failed_when: lv_create.rc > 0
+- name: Set local storage contents only to iso
+  ansible.builtin.command: pvesh set /storage/local --content {{ proxmox_local_content }}
+  become: true
+  register: localstorage_iso
+  changed_when: localstorage_iso.rc == 0
+  failed_when: localstorage_iso.rc > 0
+- name: Get list of storages
+  become: true
+  ansible.builtin.command: pvesh get /storage
+  changed_when: false
+  register: storages_list
+- name: Get list of storages in pool
+  become: true
+  ansible.builtin.command: pvesh get /pools/{{ proxmox_k8s_pool_name }}
+  changed_when: false
+  register: pool_storages_list
+- name: Check if storage exists
+  ansible.builtin.set_fact:
+    nvme_storage_exist: "{{ proxmox_k8s_pool_storage_name in storages_list.stdout }}"
+- name: Create lvmthin storage if not exist
+  when: not nvme_storage_exist
+  block:
+    - name: Create storage
+      ansible.builtin.command: >-
+        pvesm add lvmthin {{ proxmox_k8s_pool_storage_name }}
+        --content {{ proxmox_k8s_pool_storage_nvme_content }}
+        --thinpool {{ proxmox_k8s_pool_storage_nvme_lvname }}
+        --vgname {{ proxmox_k8s_pool_storage_nvme_vgname }}
+      become: true
+      register: create_storage
+      changed_when: create_storage.rc == 0
+      failed_when: create_storage.rc > 0
+- name: Check if storage in pool exists
+  ansible.builtin.set_fact:
+    pool_member_exist: "{{ proxmox_k8s_pool_storage_name in pool_storages_list.stdout }}"
+- name: Add storage member to k8s pool if not exist
+  when: not pool_member_exist
+  block:
+    - name: Add storage to pool
+      ansible.builtin.command: >-
+        pvesh set /pools/{{ proxmox_k8s_pool_name }}
+        --storage {{ proxmox_k8s_pool_storage_name }}
+      become: true
+      register: pool_add_storage
+      changed_when: pool_add_storage.rc == 0
+      failed_when: pool_add_storage.rc > 0

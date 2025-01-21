@@ -1,439 +1,66 @@
 - name: Import distro specific vars
   ansible.builtin.include_vars:
-    # dir: vars
     file: "vars/proxmox.yml"
-- name: Install basic software
-  tags: always
-  become: true
-  ansible.builtin.apt:
-    name:
-      - sudo
-      - htop
-      - curl
-      - wget
-      - tmux
-      - neovim
-      - btop
-      - git
-      - jq
-# pveum acl modify / -group provision -role Administrator
-# pveum user modify dellme6@pam -group provision
-- name: Get list of API groups
-  become: true
-  ansible.builtin.command: pvesh get /access/groups
-  changed_when: false
-  register: pve_groups_list
-- name: Check if provisioning group exists
+# - name: Import distro specific vars 2
+#   ansible.builtin.include_vars:
+#     file: "vars/debian.yaml"
+# TODO: uncomment after development
+# - name: Configure the Proxmox
+#   ansible.builtin.import_tasks: proxmox-configure.yml
+- name: Template facts
   ansible.builtin.set_fact:
-    ansible_group_existed: "{{ proxmox_ansible_group in pve_groups_list.stdout }}"
-- name: Create API group if not exist
-  when: not ansible_group_existed
-  become: true
-  ansible.builtin.command: >-
-    pvesh create /access/groups
-    --groupid {{ proxmox_ansible_group }}
-  register: pvesh_create_group
-  changed_when: "'error' not in pvesh_create_group.stdout"
-  failed_when: "'error' in pvesh_create_group.stdout"
-
-- name: Get list of API users
-  become: true
-  ansible.builtin.command: pvesh get /access/users
-  changed_when: false
-  register: pve_user_list
-- name: Check if user exists
-  ansible.builtin.set_fact:
-    ansible_user_existed: "{{ proxmox_ansible_user in pve_user_list.stdout }}"
-- name: Create API user if not exist
-  when: not ansible_user_existed
-  become: true
-  ansible.builtin.command: >-
-    pvesh create /access/users
-    --userid {{ proxmox_ansible_user }}
-    --groups {{ proxmox_ansible_group }}
-  register: pvesh_create_user
-  changed_when: "'error' not in pvesh_create_user.stdout"
-  failed_when: "'error' in pvesh_create_user.stdout"
-
-- name: Get list of pools
-  become: true
-  ansible.builtin.command: pvesh get /pools
-  changed_when: false
-  register: pools_list
-- name: Check if pool exists
-  ansible.builtin.set_fact:
-    k8s_pool_exist: "{{ proxmox_k8s_pool_name in pools_list.stdout }}"
-- name: Create k8s pool if not exist
-  when: not k8s_pool_exist
-  become: true
-  ansible.builtin.command: pvesh create /pools --poolid {{ proxmox_k8s_pool_name }}
-  register: pool_create
-  changed_when: "'error' not in pool_create.stdout"
-  failed_when: "'error' in pool_create.stdout"
-
-- name: Get list of LVMs
-  become: true
-  ansible.builtin.command: pvesm scan lvm
-  changed_when: false
-  register: lvms_list
-- name: Check if LVM exist
-  ansible.builtin.set_fact:
-    lvm_exist: "{{ proxmox_k8s_pool_storage_nvme_vgname in lvms_list.stdout }}"
-- name: Create k8s lvm storage if not exist
-  when: not lvm_exist
-  block:
-    - name: Print status
-      ansible.builtin.debug:
-        msg: The k8s lvm storage pool not exist in lvms list
-    - name: Create GPT table
-      become: true
-      ansible.builtin.command: >-
-        parted -s /dev/{{ proxmox_k8s_pool_storage_nvme_disk_name }} mklabel gpt
-      register: gpt_create
-      changed_when: gpt_create.rc == 0
-      failed_when: gpt_create.rc > 0
-    - name: Print status
-      ansible.builtin.debug:
-        msg: Created the GPT partition table on disk
-    - name: Create partition
-      become: true
-      ansible.builtin.command: >-
-        parted
-        -a optimal /dev/{{ proxmox_k8s_pool_storage_nvme_disk_name }}
-        --script mkpart ext4 2048s 100%
-      register: partition_create
-      changed_when: partition_create.rc == 0
-      failed_when: partition_create.rc > 0
-    - name: Create PVs
-      become: true
-      # ansible.builtin.command: pvcreate /dev/disk/by-id/yourDisk-part1
-      ansible.builtin.command: >-
-        pvcreate /dev/{{ proxmox_k8s_pool_storage_nvme_partition_name }}
-      register: pv_create
-      changed_when: pv_create.rc == 0
-      failed_when: pv_create.rc > 0
-    - name: Create VGs
-      become: true
-      # ansible.builtin.command: vgcreate newVgName /dev/disk/by-id/yourDisk-part1
-      ansible.builtin.command: >-
-        vgcreate {{ proxmox_k8s_pool_storage_nvme_vgname }}
-        /dev/{{ proxmox_k8s_pool_storage_nvme_partition_name }}
-      register: vg_create
-      changed_when: vg_create.rc == 0
-      failed_when: vg_create.rc > 0
-    - name: Create LVs
-      become: true
-      ansible.builtin.command: >-
-        lvcreate -l99%FREE
-        -n {{ proxmox_k8s_pool_storage_nvme_lvname }}
-        -T {{ proxmox_k8s_pool_storage_nvme_vgname }}
-      register: lv_create
-      changed_when: lv_create.rc == 0
-      failed_when: lv_create.rc > 0
-
-- name: Set local storage contents only to iso
-  ansible.builtin.command: pvesh set /storage/local --content {{ proxmox_local_content }}
-  become: true
-  register: localstorage_iso
-  changed_when: localstorage_iso.rc == 0
-  failed_when: localstorage_iso.rc > 0
-- name: Get list of storages
-  become: true
-  ansible.builtin.command: pvesh get /storage
-  changed_when: false
-  register: storages_list
-- name: Get list of storages in pool
-  become: true
-  ansible.builtin.command: pvesh get /pools/{{ proxmox_k8s_pool_name }}
-  changed_when: false
-  register: pool_storages_list
-
-- name: Check if storage exists
-  ansible.builtin.set_fact:
-    nvme_storage_exist: "{{ proxmox_k8s_pool_storage_name in storages_list.stdout }}"
-- name: Create lvmthin storage if not exist
-  when: not nvme_storage_exist
-  block:
-    - name: Create storage
-      ansible.builtin.command: >-
-        pvesm add lvmthin {{ proxmox_k8s_pool_storage_name }}
-        --content {{ proxmox_k8s_pool_storage_nvme_content }}
-        --thinpool {{ proxmox_k8s_pool_storage_nvme_lvname }}
-        --vgname {{ proxmox_k8s_pool_storage_nvme_vgname }}
-      become: true
-      register: create_storage
-      changed_when: create_storage.rc == 0
-      failed_when: create_storage.rc > 0
-
-- name: Check if storage in pool exists
-  ansible.builtin.set_fact:
-    pool_member_exist: "{{ proxmox_k8s_pool_storage_name in pool_storages_list.stdout }}"
-- name: Add storage member to k8s pool if not exist
-  when: not pool_member_exist
-  block:
-    - name: Add storage to pool
-      ansible.builtin.command: >-
-        pvesh set /pools/{{ proxmox_k8s_pool_name }}
-        --storage {{ proxmox_k8s_pool_storage_name }}
-      become: true
-      register: pool_add_storage
-      changed_when: pool_add_storage.rc == 0
-      failed_when: pool_add_storage.rc > 0
-#### in case of existing template ###
-####                              ###
-#####################################
-- name: Import distro specific vars
-  ansible.builtin.include_vars:
-    # dir: vars
-    file: "vars/vmtemplate.yml"
-- name: Cluster NextID
-  ansible.builtin.command: pvesh get /cluster/nextid
-  become: true
-  changed_when: false
-  register: nextid
+    local_storage_name: "local"
 - name: Snippet storage fs path
   become: true
   changed_when: false
-  # ansible.builtin.command: pvesh get /storage/local --noborder --noheader | grep ^path | awk '{print $NF}'
   ansible.builtin.shell:
     cmd: |
       set -o pipefail
-      pvesh get /storage/local --output-format json | jq -r .path
+      pvesh get /storage/{{ local_storage_name }} --output-format json | jq -r .path
     executable: /bin/bash
   register: local_storage_path
-- name: VM template creation date
-  ansible.builtin.command: date +%Y-%m-%d
-  register: vm_created
-  changed_when: false
-- name: Template facts
+- name: Set fact
+  become: true
   ansible.builtin.set_fact:
-    template_vm_id: "{{ nextid.stdout }}"
-    template_name_full: "{{ TEMPLATE_NAME }}-{{ FLATCAR_VERSION }}"
-    template_vm_created: "{{ vm_created.stdout }}"
-    template_vm_description: "Flatcar Linux Template\
-      \
-      - Version             : latest\
-      - Cloud-init          : true\
-      Creation date : {{ vm_created.stdout }}"
     snippet_storage_path: "{{ local_storage_path.stdout }}/snippets"
-    snippet_storage_name: "{{ SNIPPET_STORAGE }}"
-    iso_storage_path: "{{ local_storage_path.stdout }}/template/iso"
-    template_vm_storage_type: "{{ TEMPLATE_VMSTORAGE_TYPE }}"
-    template_vm_storage: "{{ TEMPLATE_VMSTORAGE }}"
-    template_vm_disk_options: "{{ VMDISK_OPTIONS }}"
-    flatcar_version: "{{ FLATCAR_VERSION }}"
-    flatcar_image_url: "https://stable.release.flatcar-linux.net/amd64-usr/current/flatcar_production_qemu_image.img"
-    flatcar_image: "flatcar_production_qemu_image.img"
-- name: Add flatcar ignition template
+- name: Create the debian vm template
+  ansible.builtin.import_tasks: debian2.yml
   become: true
-  ansible.builtin.copy:
-    src: fcar-base-tmplt.yaml
-    dest: "{{ snippet_storage_path }}/fcar-base-tmplt.yaml"
-    owner: ansible
-    group: ansible
-    mode: "0755"
-- name: Add flatcar deploy script
-  become: true
-  ansible.builtin.copy:
-    src: hook-fcar.sh
-    dest: "{{ snippet_storage_path }}/hook-fcar.sh"
-    owner: ansible
-    group: ansible
-    mode: "0755"
-- name: Check if flatcar qemu image exists
-  become: true
-  ansible.builtin.stat:
-    path: "{{ iso_storage_path }}/{{ flatcar_image }}"
-  register: stat_result
-- name: Download flatcar qemu vdisk image
-  become: true
-  when: not stat_result.stat.exists
-  ansible.builtin.get_url:
-    validate_certs: false
-    url: "{{ flatcar_image_url }}"
-    dest: "{{ iso_storage_path }}"
-    mode: "0755"
-- name: Get list of VM templates
-  become: true
-  ansible.builtin.command: qm list
-  changed_when: false
-  register: vms_list
-- name: Check if flatcar VM template exists
-  ansible.builtin.set_fact:
-    template_exist: "{{ template_name_full in vms_list.stdout }}"
-- name: Create flatcar vm template if not exist
-  when: not template_exist
-  block:
-    - name: Create flatcar vm template
-      become: true
-      register: qm_create
-      changed_when: qm_create.rc == 0
-      failed_when: qm_create.rc > 0
-      ansible.builtin.command: >-
-        qm create {{ template_vm_id }} --name {{ template_name_full }}
-    - name: Set flatcar vm template configuration
-      become: true
-      register: qm_set
-      changed_when: qm_set.rc == 0
-      failed_when: qm_set.rc > 0
-      ansible.builtin.command: >-
-        qm set {{ template_vm_id }} --memory 16384 \
-          --cpu host \
-          --cores 2 \
-          --agent enabled=1 \
-          --autostart \
-          --onboot 1 \
-          --ostype l26 \
-          --tablet 0 \
-          --boot c --bootdisk scsi0
-    - name: Set flatcar vm template description
-      become: true
-      register: qm_set_desc
-      changed_when: qm_set_desc.rc == 0
-      failed_when: qm_set_desc.rc > 0
-      ansible.builtin.command: >-
-        qm set {{ template_vm_id }} --description {{ template_vm_description | quote }}
-    - name: Set flatcar vm template network
-      become: true
-      register: qm_set_net
-      changed_when: qm_set_net.rc == 0
-      failed_when: qm_set_net.rc > 0
-      ansible.builtin.command: >-
-        qm set {{ template_vm_id }} --net0 virtio,bridge=vmbr0
-    - name: Set flatcar vm template cloudinit
-      become: true
-      register: qm_set_cloudinit
-      changed_when: qm_set_cloudinit.rc == 0
-      failed_when: qm_set_cloudinit.rc > 0
-      ansible.builtin.command: >-
-        qm set {{ template_vm_id }} --ide2 {{ template_vm_storage }}:cloudinit
-    - name: Set vmdisk file type
-      when: template_vm_storage_type == "file"
-      ansible.builtin.set_fact:
-        template_vm_disk_name: "{{ template_vm_id }}/vm-{{ template_vm_id }}-disk-0.qcow2"
-        template_vm_disk_format: "--format qcow2"
-    - name: Set vmdisk block type
-      when: template_vm_storage_type == "block"
-      ansible.builtin.set_fact:
-        template_vm_disk_name: "vm-{{ template_vm_id }}-disk-0"
-        template_vm_disk_format: ""
-    - name: Import flatcar vm disk
-      become: true
-      register: qm_import_disk
-      changed_when: qm_import_disk.rc == 0
-      failed_when: qm_import_disk.rc > 0
-      ansible.builtin.command: >-
-        qm importdisk {{ template_vm_id }} {{ iso_storage_path }}/{{ flatcar_image }}
-        {{ template_vm_storage }} {{ template_vm_disk_format }}
-    - name: Set flatcar vm disk
-      become: true
-      register: qm_set_vm_disk
-      changed_when: qm_set_vm_disk.rc == 0
-      failed_when: qm_set_vm_disk.rc > 0
-      ansible.builtin.command: >-
-        qm set {{ template_vm_id }}
-        --scsihw virtio-scsi-pci
-        --scsi0 {{ template_vm_storage }}:{{ template_vm_disk_name }}{{ template_vm_disk_options }}
-    - name: Set flatcar other params
-      become: true
-      register: qm_set_other_params
-      changed_when: qm_set_other_params.rc == 0
-      failed_when: qm_set_other_params.rc > 0
-      ansible.builtin.command: >-
-        qm set {{ template_vm_id }}
-        --serial0 socket
-        --vga serial0
-        --balloon 0
-    - name: Set hook-script
-      become: true
-      register: qm_set_hook_script
-      changed_when: qm_set_hook_script.rc == 0
-      failed_when: qm_set_hook_script.rc > 0
-      ansible.builtin.command: >-
-        qm set {{ template_vm_id }} -hookscript {{ snippet_storage_name }}:snippets/hook-fcar.sh
-    - name: Convert vm template
-      become: true
-      register: qm_convert_vm_template
-      changed_when: qm_convert_vm_template.rc == 0
-      failed_when: qm_convert_vm_template.rc > 0
-      ansible.builtin.command: >-
-        qm template {{ template_vm_id }}
 - name: Cluster NextID
   ansible.builtin.command: pvesh get /cluster/nextid
   become: true
   changed_when: false
   register: nextid
+- name: Set node01 facts
+  become: true
+  ansible.builtin.set_fact:
+    node_id: "{{ nextid.stdout }}"
+    node_hostname: "k8s-node-{{ nextid.stdout }}"
+    node_domain: "lan"
 - name: Create node01
   become: true
   register: create_node01
   changed_when: create_node01.rc == 0
   failed_when: create_node01.rc > 0
-  ansible.builtin.command: qm clone 100 {{ nextid.stdout }} --name node01.k8s
-  # ansible.builtin.command: qm clone {{ template_vm_id }} {{ nextid.stdout | int + 900}} --name node01.k8s
-- name: Set node01 facts
-  ansible.builtin.set_fact:
-    node01_id: "{{ nextid.stdout }}"
-- name: Cluster NextID
-  ansible.builtin.command: pvesh get /cluster/nextid
+  ansible.builtin.command: qm clone 100 {{ nextid.stdout }} --name k8s-node-{{ node_id }}.{{ node_domain }}
+- name: Add node hook script
   become: true
-  changed_when: false
-  register: nextid
-- name: Create node02
+  ansible.builtin.template:
+    src: "hook.j2"
+    dest: "{{ snippet_storage_path }}/k8s-node-{{ node_id }}.{{ node_domain }}.sh"
+    owner: ansible
+    group: ansible
+    mode: "0755"
+- name: Set hook-script
   become: true
-  register: create_node02
-  changed_when: create_node02.rc == 0
-  failed_when: create_node02.rc > 0
-  ansible.builtin.command: qm clone 100 {{ nextid.stdout }} --name node02.k8s
-- name: Set node02 facts
-  ansible.builtin.set_fact:
-    node02_id: "{{ nextid.stdout }}"
-- name: Cluster NextID
-  ansible.builtin.command: pvesh get /cluster/nextid
+  register: qm_set_hook_script
+  changed_when: qm_set_hook_script.rc == 0
+  failed_when: qm_set_hook_script.rc > 0
+  ansible.builtin.command: >-
+    qm set {{ node_id }} -hookscript {{ local_storage_name }}:snippets/k8s-node-{{ node_id }}.{{ node_domain }}.sh
+- name: Start node01
   become: true
-  changed_when: false
-  register: nextid
-- name: Create node03
-  become: true
-  register: create_node03
-  changed_when: create_node03.rc == 0
-  failed_when: create_node03.rc > 0
-  ansible.builtin.command: qm clone 100 {{ nextid.stdout }} --name node03.k8s
-- name: Set node03 facts
-  ansible.builtin.set_fact:
-    node03_id: "{{ nextid.stdout }}"
-- name: Set user node01
-  become: true
-  register: set_user
-  changed_when: set_user.rc == 0
-  failed_when: set_user.rc > 0
-  ansible.builtin.command: qm set {{ node01_id }} --ciuser ansible
-- name: Set ssh key node01
-  become: true
-  register: set_sshkey
-  changed_when: set_sshkey.rc == 0
-  failed_when: set_sshkey.rc > 0
-  ansible.builtin.command: qm set {{ node01_id }} --sshkey /home/ansible/.ssh/authorized_keys
-- name: Set user node02
-  become: true
-  register: set_user
-  changed_when: set_user.rc == 0
-  failed_when: set_user.rc > 0
-  ansible.builtin.command: qm set {{ node02_id }} --ciuser ansible
-- name: Set ssh key node02
-  become: true
-  register: set_sshkey
-  changed_when: set_sshkey.rc == 0
-  failed_when: set_sshkey.rc > 0
-  ansible.builtin.command: qm set {{ node02_id }} --sshkey /home/ansible/.ssh/authorized_keys
-- name: Set user node03
-  become: true
-  register: set_user
-  changed_when: set_user.rc == 0
-  failed_when: set_user.rc > 0
-  ansible.builtin.command: qm set {{ node03_id }} --ciuser ansible
-- name: Set ssh key node03
-  become: true
-  register: set_sshkey
-  changed_when: set_sshkey.rc == 0
-  failed_when: set_sshkey.rc > 0
-  ansible.builtin.command: qm set {{ node03_id }} --sshkey /home/ansible/.ssh/authorized_keys
+  register: start01
+  changed_when: start01.rc == 0
+  failed_when: start01.rc > 0
+  ansible.builtin.command: qm start {{ node_id }}

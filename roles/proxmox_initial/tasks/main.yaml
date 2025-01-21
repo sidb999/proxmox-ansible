@@ -38,3 +38,5 @@
       - sudo
       - parted
       - kpartx
+      - jq
+      - yq

@@ -11,9 +11,3 @@ proxmox_k8s_pool_storage_nvme_lvname: lv-k8s-nvme
 # all content kinds: images,rootdir,vztmpl,backup,iso,snippets
 proxmox_local_content: iso,vztmpl,backup,snippets
 proxmox_k8s_pool_storage_nvme_content: images,rootdir
-cloudimage_distro: debian
-template_storage: local
-cloudimage_downloaddir: /tmp
-cloudimage_keep: false
-cloudimage_qemuagent: true
-cloudimage_diskparams: cache=none,discard=on,ssd=1

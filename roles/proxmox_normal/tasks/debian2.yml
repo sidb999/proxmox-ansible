@@ -1,0 +1,90 @@
+---
+- name: Template facts
+  ansible.builtin.set_fact:
+    iso_storage_path: "{{ local_storage_path.stdout }}/images"
+    debian_iso_filename: "debian-12-generic-amd64.qcow2"
+    debian_iso_url: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
+    template_name_full: "debian12-cloud"
+    vm_disks_storage: "k8s-lvmthin-nvme"
+- name: Creates directory
+  ansible.builtin.file:
+    path: "{{ snippet_storage_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0775"
+- name: Add debian cloudinit config to snippets
+  ansible.builtin.copy:
+    src: user-data.yaml
+    dest: "{{ snippet_storage_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+- name: Add debian cloudinit config to snippets
+  ansible.builtin.copy:
+    src: vendor-data.yaml
+    dest: "{{ snippet_storage_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+- name: Check if debian qemu image exists
+  become: true
+  ansible.builtin.stat:
+    path: "{{ iso_storage_path }}/{{ debian_iso_filename }}"
+  register: stat_result
+- name: Download debian qemu vdisk image
+  become: true
+  when: not stat_result.stat.exists
+  ansible.builtin.get_url:
+    validate_certs: false
+    url: "{{ debian_iso_url }}"
+    dest: "{{ iso_storage_path }}"
+    mode: "0755"
+
+- name: Get list of VM templates
+  become: true
+  ansible.builtin.command: qm list
+  changed_when: false
+  register: vms_list
+- name: Check if flatcar VM template exists
+  ansible.builtin.set_fact:
+    template_exist: "{{ template_name_full in vms_list.stdout }}"
+- name: Create flatcar vm template if not exist
+  when: not template_exist
+  block:
+    - name: Cluster NextID
+      ansible.builtin.command: pvesh get /cluster/nextid
+      changed_when: false
+      register: nextid
+    - name: Create debian vm
+      register: qm_create
+      changed_when: qm_create.rc == 0
+      failed_when: qm_create.rc > 0
+      ansible.builtin.command: >-
+        qm create {{ nextid.stdout }} \
+        --name {{ template_name_full }} \
+        --agent enabled=1
+        --description "Debian 12 cloud-init template" \
+        --ostype l26 \
+        --machine q35 \
+        --cpu host \
+        --cores 2 \
+        --memory 16384 \
+        --balloon 4096 \
+        --scsihw virtio-scsi-single \
+        --scsi0 {{ vm_disks_storage }}:0,import-from={{ iso_storage_path }}/{{ debian_iso_filename }},discard=on,ssd=1 \
+        --net0 virtio,bridge=vmbr0 \
+        --tablet 0 \
+        --rng0 source=/dev/urandom \
+        --boot order=scsi0 \
+        --vga serial0 --serial0 socket \
+        --ide2 {{ vm_disks_storage }}:cloudinit \
+        --citype nocloud
+        --cicustom "vendor={{ local_storage_name }}:snippets/vendor-data.yaml,user={{ local_storage_name }}:snippets/user-data.yaml"
+        --ipconfig0 ip=dhcp
+    - name: Convert vm to template
+      register: qm_convert
+      changed_when: qm_convert.rc == 0
+      failed_when: qm_convert.rc > 0
+      ansible.builtin.command: >-
+        qm template {{ nextid.stdout }}

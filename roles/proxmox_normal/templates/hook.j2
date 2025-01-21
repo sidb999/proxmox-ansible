@@ -1,0 +1,11 @@
+#!/bin/bash
+
+#set -e
+
+phase="$2"
+
+if [[ "${phase}" == "post-start" ]]; then
+	sleep 30
+	qm guest exec {{ node_id }} -- /usr/bin/hostnamectl set-hostname k8s-node-{{ node_id }}
+	qm guest exec {{ node_id }} -- systemctl restart systemd-networkd
+fi
