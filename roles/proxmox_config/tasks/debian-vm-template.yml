@@ -5,7 +5,7 @@
     debian_iso_filename: "debian-12-generic-amd64.qcow2"
     debian_iso_url: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
     template_name_full: "debian12-cloud"
-    vm_disks_storage: "k8s-lvmthin-nvme"
+    vm_disks_storage: "{{ proxmox_k8s_pool_storage_name }}"
 - name: Creates directory
   ansible.builtin.file:
     path: "{{ snippet_storage_path }}"

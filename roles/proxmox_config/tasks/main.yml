@@ -1,9 +1,6 @@
 - name: Import distro specific vars
   ansible.builtin.include_vars:
     file: "vars/proxmox.yml"
-# - name: Import distro specific vars 2
-#   ansible.builtin.include_vars:
-#     file: "vars/debian-vm-template.yml"
 - name: Configure the Proxmox
   ansible.builtin.import_tasks: proxmox-configure.yml
 - name: Template facts

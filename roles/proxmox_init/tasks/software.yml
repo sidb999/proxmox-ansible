@@ -7,19 +7,19 @@
   tags: always
   ansible.builtin.apt:
     name:
-      - sudo
-      - parted
-      - kpartx
-      - jq
-      - yq
-      - htop
       - btop
       - curl
-      - wget
-      - tmux
-      - neovim
-      - git
       - efibootmgr
+      - git
+      - htop
+      - jq
+      - kpartx
+      - neovim
+      - parted
+      - sudo
+      - tmux
+      - wget
+      - yq
 - name: Install BootNext
   ansible.builtin.get_url:
     validate_certs: false
