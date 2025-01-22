@@ -1,3 +1,8 @@
+- name: Install nfs
+  tags: nfs
+  ansible.builtin.apt:
+    update_cache: true
+    name: nfs-kernel-server
 - name: Create exports dir
   tags: nfs
   ansible.builtin.file:

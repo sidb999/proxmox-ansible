@@ -1,37 +1,19 @@
 #!/usr/bin/env ansible-playbook
----
 - name: Add ansible user
-  hosts: debian
+  hosts: nfsservers
   tags: always
-  become: true
-  pre_tasks:
-    - name: Add ansible user for ansible
-      ansible.builtin.user:
-        name: ansible
-        group: root
+  remote_user: root
   roles:
-    - base
+    - ansible_user
 - name: Install necessary software for debian hosts
   hosts: debian
   remote_user: ansible
   become: true
-  pre_tasks:
-    - name: Install updates
-      tags: always
-      ansible.builtin.apt:
-        update_cache: true
-        upgrade: dist
   roles:
     - software_debian
 - name: Install nfs server storage
   remote_user: ansible
   hosts: nfs_servers
   become: true
-  pre_tasks:
-    - name: Install nfs
-      tags: nfs
-      ansible.builtin.apt:
-        update_cache: true
-        name: nfs-kernel-server
   roles:
     - nfs

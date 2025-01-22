@@ -1,0 +1,8 @@
+- name: Remove enterprise pve repo
+  ansible.builtin.file:
+    state: absent
+    path: /etc/apt/sources.list.d/pve-enterprise.list
+- name: Remove enterprise ceph repo
+  ansible.builtin.file:
+    state: absent
+    path: /etc/apt/sources.list.d/ceph.list

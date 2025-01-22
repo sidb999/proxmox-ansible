@@ -28,21 +28,17 @@
     group: root
     mode: "0755"
 - name: Check if debian qemu image exists
-  become: true
   ansible.builtin.stat:
     path: "{{ iso_storage_path }}/{{ debian_iso_filename }}"
   register: stat_result
 - name: Download debian qemu vdisk image
-  become: true
   when: not stat_result.stat.exists
   ansible.builtin.get_url:
     validate_certs: false
     url: "{{ debian_iso_url }}"
     dest: "{{ iso_storage_path }}"
     mode: "0755"
-
 - name: Get list of VM templates
-  become: true
   ansible.builtin.command: qm list
   changed_when: false
   register: vms_list

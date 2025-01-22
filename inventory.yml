@@ -1,15 +1,10 @@
-debian:
-  hosts:
-    nfs.lan:
-    pve:
-
-fedora:
-# m1.lan
-
-nfs_servers:
-  hosts:
-    nfs.lan:
-
 proxmox:
   hosts:
     pve:
+debian:
+  hosts:
+    pve:
+    nfs:
+nfsservers:
+  hosts:
+    nfs:

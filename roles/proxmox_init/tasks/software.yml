@@ -1,15 +1,21 @@
+---
 - name: Install updates
-  tags: always
   ansible.builtin.apt:
     update_cache: true
     upgrade: dist
 - name: Install basic software
-  tags: debian
+  tags: always
   ansible.builtin.apt:
     name:
+      - sudo
+      - parted
+      - kpartx
+      - jq
+      - yq
       - htop
       - btop
       - curl
       - wget
       - tmux
       - neovim
+      - git

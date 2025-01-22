@@ -1,29 +1,17 @@
 #!/usr/bin/env ansible-playbook
----
 - name: Add ansible user
   hosts: proxmox
   remote_user: root
-  pre_tasks:
-    - name: Add ansible group
-      ansible.builtin.group:
-        name: ansible
-        state: present
-    - name: Add ansible user for ansible
-      ansible.builtin.user:
-        name: ansible
-        append: true
-        groups: ansible,sudo
-        password: "!"
-        shell: /bin/bash
   roles:
-    - base
+    - ansible_user
 - name: Proxmox initial configuration
   hosts: proxmox
   remote_user: root
   roles:
-    - proxmox_initial
+    - proxmox_init
 - name: Proxmox normal configuration
   hosts: proxmox
   remote_user: ansible
+  become: true
   roles:
-    - proxmox_normal
+    - proxmox_config

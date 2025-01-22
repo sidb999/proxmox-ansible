@@ -1,18 +1,3 @@
----
-- name: Install basic software
-  tags: always
-  become: true
-  ansible.builtin.apt:
-    name:
-      - sudo
-      - htop
-      - curl
-      - wget
-      - tmux
-      - neovim
-      - btop
-      - git
-      - jq
 # pveum acl modify / -group provision -role Administrator
 # pveum user modify dellme6@pam -group provision
 - name: Get list of API groups
