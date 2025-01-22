@@ -19,35 +19,10 @@
     snippet_storage_path: "{{ local_storage_path.stdout }}/snippets"
 - name: Create the debian vm template
   ansible.builtin.import_tasks: debian-vm-template.yml
-- name: Cluster NextID
-  ansible.builtin.command: pvesh get /cluster/nextid
-  changed_when: false
-  register: nextid
-- name: Set node01 facts
-  ansible.builtin.set_fact:
-    node_id: "{{ nextid.stdout }}"
-    node_hostname: "k8s-node-{{ nextid.stdout }}"
-    node_domain: "srv"
-- name: Create node01
-  register: create_node01
-  changed_when: create_node01.rc == 0
-  failed_when: create_node01.rc > 0
-  ansible.builtin.command: qm clone 100 {{ nextid.stdout }} --name k8s-node-{{ node_id }}.{{ node_domain }}
-- name: Add node hook script
-  ansible.builtin.template:
-    src: "hook.j2"
-    dest: "{{ snippet_storage_path }}/k8s-node-{{ node_id }}.{{ node_domain }}.sh"
-    owner: ansible
-    group: ansible
-    mode: "0755"
-- name: Set hook-script
-  register: qm_set_hook_script
-  changed_when: qm_set_hook_script.rc == 0
-  failed_when: qm_set_hook_script.rc > 0
-  ansible.builtin.command: >-
-    qm set {{ node_id }} -hookscript {{ local_storage_name }}:snippets/k8s-node-{{ node_id }}.{{ node_domain }}.sh
-- name: Start node01
-  register: start01
-  changed_when: start01.rc == 0
-  failed_when: start01.rc > 0
-  ansible.builtin.command: qm start {{ node_id }}
+- name: Create debian qemu virtual machines
+  ansible.builtin.include_tasks: debian-qemu-vms.yml
+  loop:
+    - node
+    - node
+    - node
+    - management
