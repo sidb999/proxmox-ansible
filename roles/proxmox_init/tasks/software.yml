@@ -19,3 +19,10 @@
       - tmux
       - neovim
       - git
+      - efibootmgr
+- name: Install BootNext
+  ansible.builtin.get_url:
+    validate_certs: false
+    url: "https://github.com/TensorWorks/bootnext/releases/download/v0.0.2/bootnext-linux-amd64"
+    dest: "/usr/local/bin/bootnext"
+    mode: "0755"

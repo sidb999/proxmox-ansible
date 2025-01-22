@@ -4,9 +4,8 @@
 # - name: Import distro specific vars 2
 #   ansible.builtin.include_vars:
 #     file: "vars/debian-vm-template.yml"
-# TODO: uncomment after development
-# - name: Configure the Proxmox
-#   ansible.builtin.import_tasks: proxmox-configure.yml
+- name: Configure the Proxmox
+  ansible.builtin.import_tasks: proxmox-configure.yml
 - name: Template facts
   ansible.builtin.set_fact:
     local_storage_name: "local"
@@ -31,7 +30,7 @@
   ansible.builtin.set_fact:
     node_id: "{{ nextid.stdout }}"
     node_hostname: "k8s-node-{{ nextid.stdout }}"
-    node_domain: "lan"
+    node_domain: "srv"
 - name: Create node01
   register: create_node01
   changed_when: create_node01.rc == 0

@@ -89,8 +89,10 @@
       ansible.builtin.command: >-
         pvcreate /dev/{{ proxmox_k8s_pool_storage_nvme_partition_name }}
       register: pv_create
-      changed_when: pv_create.rc == 0
-      failed_when: pv_create.rc > 0
+      # ignore error about initialization of physical volume
+      changed_when: false
+      # changed_when: pv_create.rc == 0
+      # failed_when: pv_create.rc > 0
     - name: Create VGs
       become: true
       # ansible.builtin.command: vgcreate newVgName /dev/disk/by-id/yourDisk-part1
