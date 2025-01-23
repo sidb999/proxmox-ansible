@@ -1,5 +1,6 @@
 ---
 proxmox_ansible_user: ansible@pam
+proxmox_clusterapi_user: capmox@pve
 proxmox_ansible_group: provision
 proxmox_k8s_pool_name: k8s
 proxmox_k8s_pool_storage_name: k8s-lvmthin-nvme

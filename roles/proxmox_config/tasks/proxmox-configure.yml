@@ -35,6 +35,48 @@
   register: pvesh_create_user
   changed_when: "'error' not in pvesh_create_user.stdout"
   failed_when: "'error' in pvesh_create_user.stdout"
+- name: Check if user exists
+  ansible.builtin.set_fact:
+    clusterapi_user_existed: "{{ proxmox_clusterapi_user in pve_user_list.stdout }}"
+- name: Create Cluster API user if not exist
+  when: not clusterapi_user_existed
+  become: true
+  register: pveum_create
+  changed_when: pveum_create.rc == 0
+  failed_when: pveum_create.rc > 0
+  ansible.builtin.command: >-
+    pveum user add {{ proxmox_clusterapi_user }}
+- name: Cluster API user add role
+  when: not clusterapi_user_existed
+  become: true
+  register: pveum_aclmod
+  changed_when: pveum_aclmod.rc == 0
+  failed_when: pveum_aclmod.rc > 0
+  ansible.builtin.command: >-
+    pveum aclmod / -user {{ proxmox_clusterapi_user }} -role PVEVMAdmin
+- name: Cluster API user add token
+  when: not clusterapi_user_existed
+  become: true
+  register: pveum_token
+  changed_when: pveum_token.rc == 0
+  failed_when: pveum_token.rc > 0
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      pveum user token add {{ proxmox_clusterapi_user }} capi -privsep 0 --output-format yaml | yq -r .value
+    executable: /bin/bash
+- name: Save locally
+  become: false
+  when: pveum_token.rc == 0
+  register: token_save
+  changed_when: token_save.rc == 0
+  failed_when: token_save.rc > 0
+  delegate_to: 127.0.0.1
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      yq e -i '.PROXMOX_SECRET = "{{ pveum_token.stdout }}"' /home/sidc/.cluster-api/clusterctl.yaml
+    executable: /bin/bash
 - name: Get list of pools
   become: true
   ansible.builtin.command: pvesh get /pools
