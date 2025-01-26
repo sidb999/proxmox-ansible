@@ -14,3 +14,5 @@ proxmox_k8s_pool_storage_nvme_lvname: lv-k8s-nvme
 # all content kinds: images,rootdir,vztmpl,backup,iso,snippets
 proxmox_local_content: iso,vztmpl,backup,snippets
 proxmox_k8s_pool_storage_nvme_content: images,rootdir
+proxmox_roles_proxmox_config_user_data_passwd: ""
+proxmox_roles_proxmox_config_ssh_authorized_key: ""

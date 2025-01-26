@@ -20,6 +20,8 @@
     owner: root
     group: root
     mode: "0755"
+- name: Prepare userdata
+  ansible.builtin.include_tasks: prepare-user-data.yml
 - name: Add debian cloudinit config to snippets
   ansible.builtin.copy:
     src: vendor-data.yaml

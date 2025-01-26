@@ -1,0 +1,61 @@
+- name: Prepare user-data cloudinit config
+  block:
+    - name: Get proxmox_clusterapi_clusterctl_config_path
+      when: (proxmox_roles_proxmox_config_user_data_passwd is not defined) or (proxmox_roles_proxmox_config_user_data_passwd|length == 0)
+      block:
+        - name: Decrypt proxmox_roles_proxmox_config_user_data_passwd
+          become: false
+          delegate_to: 127.0.0.1
+          changed_when: res_passwd_cmd.rc == 0
+          failed_when: res_passwd_cmd.rc > 0
+          register: res_passwd_cmd
+          ansible.builtin.shell:
+            cmd: |
+              set -o pipefail
+              pass show infra/k8s/proxmox_roles_proxmox_config_user_data | sed -n '1p'
+            executable: /bin/bash
+        - name: Set proxmox_roles_proxmox_config_user_data_passwd var
+          ansible.builtin.set_fact:
+            proxmox_roles_proxmox_config_user_data_passwd: "{{ res_passwd_cmd.stdout }}"
+    - name: Get proxmox_roles_proxmox_config_ssh_authorized_key
+      when: (proxmox_roles_proxmox_config_ssh_authorized_key is not defined) or (proxmox_roles_proxmox_config_ssh_authorized_key|length == 0)
+      block:
+        - name: Decrypt proxmox_roles_proxmox_config_ssh_authorized_key
+          become: false
+          delegate_to: 127.0.0.1
+          changed_when: res_authpubkey_cmd.rc == 0
+          failed_when: res_authpubkey_cmd.rc > 0
+          register: res_authpubkey_cmd
+          ansible.builtin.shell:
+            cmd: |
+              set -o pipefail
+              pass show infra/k8s/proxmox_roles_proxmox_config_user_data | sed -n '2p'
+            executable: /bin/bash
+        - name: Set proxmox_roles_proxmox_config_ssh_authorized_key var
+          ansible.builtin.set_fact:
+            proxmox_roles_proxmox_config_ssh_authorized_key: "{{ res_authpubkey_cmd.stdout }}"
+- name: Add debian cloudinit config to snippets
+  ansible.builtin.copy:
+    src: user-data.yaml
+    dest: "{{ snippet_storage_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+- name: Set passwd
+  register: passwd_res_cmd
+  changed_when: passwd_res_cmd.rc == 0
+  failed_when: passwd_res_cmd.rc > 0
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      yq e -i '.users[1].passwd = "{{ proxmox_roles_proxmox_config_user_data_passwd }}"' {{ snippet_storage_path }}/user-data.yaml
+    executable: /bin/bash
+- name: Set pubkey
+  register: passwd_res_cmd
+  changed_when: passwd_res_cmd.rc == 0
+  failed_when: passwd_res_cmd.rc > 0
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      yq e -i '.users[1].ssh_authorized_keys[0] = "{{ proxmox_roles_proxmox_config_ssh_authorized_key }}"' {{ snippet_storage_path }}/user-data.yaml
+    executable: /bin/bash
