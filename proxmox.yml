@@ -13,5 +13,7 @@
   hosts: proxmox
   remote_user: ansible
   become: true
+  vars:
+    create: true
   roles:
     - proxmox_config

@@ -1,0 +1,19 @@
+- name: Manage DHCP leases
+  block:
+    - name: Set facts
+      ansible.builtin.set_fact:
+        address: "10.2.222.{{ next_vm_id }}"
+    - name: Add DHCP lease
+      when: create
+      register: dhcp_lease_add_cmd
+      community.routeros.command:
+        commands:
+          - /ip dhcp-server lease add address={{ address }} mac-address={{ mac }} server="dhcp[SRV]"
+        retries: 1
+    - name: Remove lease
+      when: not create
+      register: print_lease_cmd
+      community.routeros.command:
+        commands:
+          - /ip dhcp-server lease remove [find where address={{ address }}]
+        retries: 1

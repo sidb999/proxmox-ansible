@@ -1,10 +1,19 @@
-proxmox:
-  hosts:
-    pve:
-debian:
-  hosts:
-    pve:
-    nfs:
-nfsservers:
-  hosts:
-    nfs:
+all:
+  children:
+    routers:
+      hosts:
+        router:
+          ansible_connection: ansible.netcommon.network_cli
+          ansible_network_os: community.routeros.routeros
+          ansible_ssh_pass: ""
+          ansible_user: admin
+    proxmox:
+      hosts:
+        pve:
+    debian:
+      hosts:
+        pve:
+        nfs:
+    nfsservers:
+      hosts:
+        nfs:

@@ -1,6 +1,8 @@
 ---
 proxmox_ansible_user: ansible@pam
-proxmox_clusterapi_user: capmox@pve
+proxmox_clusterapi_enabled: false
+proxmox_clusterapi_user: root@pam!capi
+proxmox_clusterapi_clusterctl_config_path: ""
 proxmox_ansible_group: provision
 proxmox_k8s_pool_name: k8s
 proxmox_k8s_pool_storage_name: k8s-lvmthin-nvme

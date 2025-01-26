@@ -1,0 +1,8 @@
+- name: Proxmox destroy vms
+  hosts: proxmox
+  remote_user: ansible
+  become: true
+  vars:
+    create: false
+  roles:
+    - proxmox_config
