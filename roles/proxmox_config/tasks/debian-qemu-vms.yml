@@ -37,28 +37,34 @@
     - name: Set node facts
       ansible.builtin.set_fact:
         next_vm_id: "{{ nextid.stdout }}"
-        node_hostname: "{{ item }}-{{ nextid.stdout }}.srv"
+        node_fqdn: "{{ item }}-{{ nextid.stdout }}.srv"
+        node_hostname: "{{ item }}-{{ nextid.stdout }}"
         shebang: "#!/bin/bash"
         mac: "{{ macaddr_cmd.stdout }}"
-    - name: Create {{ node_hostname }}
+    - name: Create {{ node_fqdn }}
       register: create_node_cmd
       changed_when: create_node_cmd.rc == 0
       failed_when: create_node_cmd.rc > 0
-      ansible.builtin.command: qm clone 100 {{ next_vm_id }} --name {{ node_hostname }}
-    - name: Add hook script to {{ node_hostname }}
+      ansible.builtin.command: qm clone 100 {{ next_vm_id }} --name {{ node_fqdn }}
+    - name: Resize {{ node_fqdn }}
+      register: resize_node_cmd
+      changed_when: resize_node_cmd.rc == 0
+      failed_when: resize_node_cmd.rc > 0
+      ansible.builtin.command: qm resize {{ next_vm_id }} scsi0 +30G
+    - name: Add hook script to {{ node_fqdn }}
       ansible.builtin.template:
         src: "hook.j2"
-        dest: "{{ snippet_storage_path }}/{{ node_hostname }}.sh"
+        dest: "{{ snippet_storage_path }}/{{ node_fqdn }}.sh"
         owner: ansible
         group: ansible
         mode: "0755"
-    - name: Set hook-script {{ node_hostname }}
+    - name: Set hook-script {{ node_fqdn }}
       register: qm_set_hook_script
       changed_when: qm_set_hook_script.rc == 0
       failed_when: qm_set_hook_script.rc > 0
       ansible.builtin.command: >-
-        qm set {{ next_vm_id }} -hookscript {{ local_storage_name }}:snippets/{{ node_hostname }}.sh
-    - name: Set macaddr {{ node_hostname }}
+        qm set {{ next_vm_id }} -hookscript {{ local_storage_name }}:snippets/{{ node_fqdn }}.sh
+    - name: Set macaddr {{ node_fqdn }}
       register: qm_set_macaddr
       changed_when: qm_set_macaddr.rc == 0
       failed_when: qm_set_macaddr.rc > 0
@@ -68,7 +74,7 @@
       delegate_to: router
       ansible.builtin.import_role:
         name: router
-    - name: Start {{ node_hostname }}
+    - name: Start {{ node_fqdn }}
       register: start01
       changed_when: start01.rc == 0
       failed_when: start01.rc > 0
@@ -83,12 +89,12 @@
           set -o pipefail
           pvesh get nodes/pve/qemu/{{ item }}/config --output-format yaml | yq -r .name
         executable: /bin/bash
-      register: node_hostname_cmd
+      register: node_fqdn_cmd
     - name: Set fact node hostname
       ansible.builtin.set_fact:
-        node_hostname: "{{ node_hostname_cmd.stdout }}"
+        node_fqdn: "{{ node_fqdn_cmd.stdout }}"
         next_vm_id: "{{ item }}"
-    - name: Stop {{ node_hostname }}
+    - name: Stop {{ node_fqdn }}
       register: stop_cmd
       changed_when: stop_cmd.rc == 0
       failed_when: stop_cmd.rc > 0
@@ -97,7 +103,7 @@
       delegate_to: router
       ansible.builtin.import_role:
         name: router
-    - name: Destroy {{ node_hostname }}
+    - name: Destroy {{ node_fqdn }}
       register: destroy_cmd
       changed_when: destroy_cmd.rc == 0
       failed_when: destroy_cmd.rc > 0
