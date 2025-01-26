@@ -1,5 +1,3 @@
-# pveum acl modify / -group provision -role Administrator
-# pveum user modify dellme6@pam -group provision
 - name: Get list of API groups
   become: true
   ansible.builtin.command: pvesh get /access/groups
@@ -35,48 +33,69 @@
   register: pvesh_create_user
   changed_when: "'error' not in pvesh_create_user.stdout"
   failed_when: "'error' in pvesh_create_user.stdout"
-- name: Check if user exists
-  ansible.builtin.set_fact:
-    clusterapi_user_existed: "{{ proxmox_clusterapi_user in pve_user_list.stdout }}"
-- name: Create Cluster API user if not exist
-  when: not clusterapi_user_existed
-  become: true
-  register: pveum_create
-  changed_when: pveum_create.rc == 0
-  failed_when: pveum_create.rc > 0
-  ansible.builtin.command: >-
-    pveum user add {{ proxmox_clusterapi_user }}
-- name: Cluster API user add role
-  when: not clusterapi_user_existed
-  become: true
-  register: pveum_aclmod
-  changed_when: pveum_aclmod.rc == 0
-  failed_when: pveum_aclmod.rc > 0
-  ansible.builtin.command: >-
-    pveum aclmod / -user {{ proxmox_clusterapi_user }} -role PVEVMAdmin
-- name: Cluster API user add token
-  when: not clusterapi_user_existed
-  become: true
-  register: pveum_token
-  changed_when: pveum_token.rc == 0
-  failed_when: pveum_token.rc > 0
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      pveum user token add {{ proxmox_clusterapi_user }} capi -privsep 0 --output-format yaml | yq -r .value
-    executable: /bin/bash
-- name: Save locally
-  become: false
-  when: pveum_token.rc == 0
-  register: token_save
-  changed_when: token_save.rc == 0
-  failed_when: token_save.rc > 0
-  delegate_to: 127.0.0.1
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      yq e -i '.PROXMOX_SECRET = "{{ pveum_token.stdout }}"' /home/sidc/.cluster-api/clusterctl.yaml
-    executable: /bin/bash
+- name: Create Cluster API User
+  when: proxmox_clusterapi_enabled
+  block:
+    - name: Get proxmox_clusterapi_clusterctl_config_path
+      when: (proxmox_clusterapi_clusterctl_config_path is not defined) or (proxmox_clusterapi_clusterctl_config_path|length == 0)
+      block:
+        # TODO: move out of here
+        - name: Decrypt proxmox_clusterapi_clusterctl_config_path
+          become: false
+          delegate_to: 127.0.0.1
+          changed_when: proxmox_clusterapi_clusterctl_config.rc == 0
+          failed_when: proxmox_clusterapi_clusterctl_config.rc > 0
+          register: proxmox_clusterapi_clusterctl_config
+          ansible.builtin.shell:
+            cmd: |
+              set -o pipefail
+              pass show infra/k8s/proxmox_clusterapi_clusterctl_config_path | sed -n '1p'
+            executable: /bin/bash
+        - name: Set var
+          ansible.builtin.set_fact:
+            proxmox_clusterapi_clusterctl_config_path: "{{ proxmox_clusterapi_clusterctl_config.stdout }}"
+    - name: Check if user exists
+      ansible.builtin.set_fact:
+        clusterapi_user_existed: "{{ proxmox_clusterapi_user in pve_user_list.stdout }}"
+    - name: Create Cluster API user if not exist
+      when: not clusterapi_user_existed
+      become: true
+      register: pveum_create
+      changed_when: pveum_create.rc == 0
+      failed_when: pveum_create.rc > 0
+      ansible.builtin.command: >-
+        pveum user add {{ proxmox_clusterapi_user }}
+    - name: Cluster API user add role
+      when: not clusterapi_user_existed
+      become: true
+      register: pveum_aclmod
+      changed_when: pveum_aclmod.rc == 0
+      failed_when: pveum_aclmod.rc > 0
+      ansible.builtin.command: >-
+        pveum aclmod / -user {{ proxmox_clusterapi_user }} -role PVEVMAdmin
+    - name: Cluster API user add token
+      when: not clusterapi_user_existed
+      become: true
+      register: pveum_token
+      changed_when: pveum_token.rc == 0
+      failed_when: pveum_token.rc > 0
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          pveum user token add {{ proxmox_clusterapi_user }} capi -privsep 0 --output-format yaml | yq -r .value
+        executable: /bin/bash
+    - name: Save locally
+      become: false
+      when: pveum_token.rc == 0
+      register: token_save
+      changed_when: token_save.rc == 0
+      failed_when: token_save.rc > 0
+      delegate_to: 127.0.0.1
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          yq e -i '.PROXMOX_SECRET = "{{ pveum_token.stdout }}"' {{ proxmox_clusterapi_clusterctl_config_path }}
+        executable: /bin/bash
 - name: Get list of pools
   become: true
   ansible.builtin.command: pvesh get /pools

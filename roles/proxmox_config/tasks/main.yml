@@ -1,12 +1,16 @@
 - name: Import distro specific vars
+  when: create
   ansible.builtin.include_vars:
     file: "vars/proxmox.yml"
 - name: Configure the Proxmox
+  when: create
   ansible.builtin.import_tasks: proxmox-configure.yml
 - name: Template facts
+  when: create
   ansible.builtin.set_fact:
     local_storage_name: "local"
 - name: Snippet storage fs path
+  when: create
   changed_when: false
   ansible.builtin.shell:
     cmd: |
@@ -15,14 +19,48 @@
     executable: /bin/bash
   register: local_storage_path
 - name: Set fact
+  when: create
   ansible.builtin.set_fact:
     snippet_storage_path: "{{ local_storage_path.stdout }}/snippets"
 - name: Create the debian vm template
+  when: create
   ansible.builtin.import_tasks: debian-vm-template.yml
+# TODO: move out of here
+- name: Decrypt router password
+  become: false
+  delegate_to: 127.0.0.1
+  changed_when: password_cmd.rc == 0
+  failed_when: password_cmd.rc > 0
+  register: password_cmd
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      pass show infra/home/router/mikrotik | sed -n '1p'
+    executable: /bin/bash
+- name: Add host to group
+  ansible.builtin.add_host:
+    name: router
+    groups: routers
+    hostname: router
+    ansible_ssh_pass: "{{ password_cmd.stdout }}"
 - name: Create debian qemu virtual machines
+  when: create
   ansible.builtin.include_tasks: debian-qemu-vms.yml
   loop:
-    - node
-    - node
-    - node
-    - management
+    - k8s-node
+    - k8s-node
+    - k8s-node
+    - k8s-management
+- name: List of vmid
+  when: not create
+  changed_when: false
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      pvesh get nodes/pve/qemu --output-format yaml | yq .[].vmid
+    executable: /bin/bash
+  register: vm_ids_cmd
+- name: Create debian qemu virtual machines
+  when: not create
+  ansible.builtin.include_tasks: debian-qemu-vms.yml
+  with_items: "{{ vm_ids_cmd.stdout_lines }}"

@@ -1,11 +1,14 @@
-#!/bin/bash
+{{ shebang }}
 
 #set -e
 
 phase="$2"
 
 if [[ "${phase}" == "post-start" ]]; then
-	sleep 30
-	qm guest exec {{ next_vm_id }} -- /usr/bin/hostnamectl set-hostname {{ node_hostname }}
-	qm guest exec {{ next_vm_id }} -- systemctl restart systemd-networkd
+	while ! qm guest exec {{ next_vm_id }} -- sudo hostnamectl set-hostname {{ node_hostname }}; do
+		echo waiting for hostnamectl succeed
+		sleep 1
+	done
+
+	qm guest exec {{ next_vm_id }} -- sudo systemctl restart systemd-networkd
 fi
